@@ -1,4 +1,4 @@
-#include "render.h"
+#include ".\include\render.h"
 
 #include ".\include\implot\implot.h"
 #include ".\include\implot\implot_internal.h"
@@ -35,7 +35,7 @@ vector<complex<float>> temp1(pixels, 0.0f);
 vector<float> temp2(pixels, 0.0f);
 vector<complex<float>> temp3(pixels, 0.0f);
 float error_f = 0;
-const std::complex<float> i(0.0, 1.0);
+const complex<float> i(0.0, 1.0);
 
 
 // Векторное произведение двух vector<float>
@@ -202,10 +202,10 @@ void single_fft(int size_total, const Mat& resizedTarget, vector<complex<float>>
     pffft_transform_ordered(pffft_setup, input_target, output, NULL, PFFFT_BACKWARD);
 
     fft_result.resize(size_total + 1, 0);
-    for (int i = 0; i < size_total + 1; ++i) {
+    for (int i = 0; i < size_total / 2 + 1; ++i) {
         fft_result[i] = complex<float>(output[2 * i], output[2 * i + 1]);
     }
-
+    
     delete[] output;
     delete[] input_target;
     pffft_destroy_setup(pffft_setup);
