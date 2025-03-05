@@ -11,8 +11,8 @@ const float c = 299792458.0f;  // Скорость света
 const float freq = 0.14e12;   // Частота
 const float lambda = (c * 1000.0) / freq;  // Длина волны
 const float k = 2 * M_PI / lambda;  // Волновой вектор
-const int pixels = 64;  // Количество пикселей
-const float pixelsize = 0.53;  // Размер пикселя
+const int pixels = 128;  // Количество пикселей
+const float pixelsize = 0.214;  // Размер пикселя
 const float focus = 30.0;  // Фокусное расстояние
 const int iteration_num = 1;  // Количество итераций
 
@@ -41,7 +41,7 @@ public:
         start_time = std::chrono::steady_clock::now(); // Запоминаем время начала
     }
 
-    void stop(string text) {
+    void stop(const string& text) {
         auto end_time = std::chrono::steady_clock::now(); // Запоминаем время окончания
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         std::cout << text << " Elapsed time: " << duration.count() << " ms\n";
@@ -79,9 +79,9 @@ float arr_mean(const vector<float>& arr) {
 float l2_norm(const vector<float>& vec) {
     float sum = 0.0;
     for (float value : vec) {
-        sum += std::pow(value, 2);
+        sum += value * value;
     }
-    return std::sqrt(sum);
+    return sqrt(sum);
 }
 
 // Линейное пространство (разбитие на сетку) от start до finish с количеством pixels
@@ -251,13 +251,12 @@ void single_fft(int size_total, const Mat& resizedTarget, vector<complex<float>>
 // Часть цикла SPR алгоритма в + направлении (+focus)
 void spr_cycle_threading_front(int start, int end, const vector<vector<complex<float>>>& near_field) {
     vector<vector<complex<float>>> Ed(pixels, vector<complex<float>>(pixels, 0.0f));
-    vector<vector<float>> omega(pixels, vector<float>(pixels, 0.0f));
+    vector<vector<float>> cos_omega(pixels, vector<float>(pixels, 0.0f));
     vector<vector<complex<float>>> far_field_temp(pixels, vector<complex<float>>(pixels, 0.0f));
     vector<complex<float>> temp1(pixels, 0.0f);
     vector<float> temp2(pixels, 0.0f);
-    vector<complex<float>> temp3(pixels, 0.0f);
-    vector<float> r = { 0, 0, focus };
-
+    vector<complex<float>> temp3(pixels*pixels, 0.0f);
+    vector<float> r { 0, 0, focus };
 
     Ed.resize(pixels);
     for (auto& row : Ed)
@@ -268,15 +267,16 @@ void spr_cycle_threading_front(int start, int end, const vector<vector<complex<f
             for (int x1 = 0; x1 < pixels; ++x1) {
                 for (int y1 = 0; y1 < pixels; ++y1) {
                     r = { (x2 * pixelsize) - (x1 * pixelsize), (y2 * pixelsize) - (y1 * pixelsize), focus };
-                    Ed[x1][y1] = (i * input_i[x1][y1] / (l2_norm(r) * 2 * lambda) * exp(i * k * l2_norm(r) + i * arg(near_field[x1][y1])));
-                    omega[x1][y1] = atan2(l2_norm(cross_product(r, { 0, 0, 1 })), dot_product(r, { 0, 0, 1 }));
+                    float norm = l2_norm(r);
+                    Ed[x1][y1] = (i * input_i[x1][y1] / (norm * 2 * lambda) * exp(i * k * norm + i * arg(near_field[x1][y1])));
+                    cos_omega[x1][y1] = focus/norm;
                 }
             }
             unwrap(Ed, temp1);
-            unwrap(omega, temp2);
-            temp3.resize(temp1.size(), 0.0f);
+            unwrap(cos_omega, temp2);
+            //temp3.resize(temp1.size(), 0.0f);
             for (int k = 0; k < temp1.size(); ++k)
-                temp3[k] = temp1[k] * (1 + cos(temp2[k]));
+                temp3[k] = temp1[k] * (1 + temp2[k]);
             far_field_temp[y2][x2-start] = complex_sum(temp3);
             //far_field[y2][x2] = complex_sum(temp3);
         }
@@ -294,12 +294,12 @@ void spr_cycle_threading_front(int start, int end, const vector<vector<complex<f
 // Часть цикла SPR алгоритма в - направлении (-focus)
 void spr_cycle_threading_back(int start, int end, vector<vector<complex<float>>>& near_field) {
     vector<vector<complex<float>>> Ed(pixels, vector<complex<float>>(pixels, 0.0f));
-    vector<vector<float>> omega(pixels, vector<float>(pixels, 0.0f));
+    vector<vector<float>> cos_omega(pixels, vector<float>(pixels, 0.0f));
     vector<vector<complex<float>>> near_field_temp(pixels, vector<complex<float>>(pixels, 0.0f));
     vector<complex<float>> temp1(pixels, 0.0f);
     vector<float> temp2(pixels, 0.0f);
-    vector<complex<float>> temp3(pixels, 0.0f);
-    vector<float> r = { 0, 0, focus };
+    vector<complex<float>> temp3(pixels * pixels, 0.0f);
+    vector<float> r { 0, 0, focus };
 
     Ed.resize(pixels);
     for (auto& row : Ed)
@@ -309,16 +309,17 @@ void spr_cycle_threading_back(int start, int end, vector<vector<complex<float>>>
         for (int y2 = 0; y2 < pixels; ++y2) {
             for (int x1 = 0; x1 < pixels; ++x1) {
                 for (int y1 = 0; y1 < pixels; ++y1) {
-                    r = { (x2 * pixelsize) - (x1 * pixelsize), (y2 * pixelsize) - (y1 * pixelsize), -focus };
-                    Ed[x1][y1] = (i * abs(far_field2[x1][y1]) / (l2_norm(r) * 2 * lambda) * exp(-i * k * l2_norm(r) + i * arg(far_field2[x1][y1])));
-                    omega[x1][y1] = atan2(l2_norm(cross_product(r, { 0, 0, -1 })), dot_product(r, { 0, 0, -1 }));
+                    r = { (x2 * pixelsize) - (x1 * pixelsize), (y2 * pixelsize) - (y1 * pixelsize), focus };
+                    float norm = l2_norm(r);
+                    Ed[x1][y1] = (i * abs(far_field2[x1][y1]) / (norm * 2 * lambda) * exp(-i * k * norm + i * arg(far_field2[x1][y1])));
+                    cos_omega[x1][y1] = focus / norm;
                 }
             }
             unwrap(Ed1, temp1);
-            unwrap(omega, temp2);
-            temp3.resize(temp1.size(), 0.0f);
+            unwrap(cos_omega, temp2);
+            //temp3.resize(temp1.size(), 0.0f);
             for (int k = 0; k < temp1.size(); ++k)
-                temp3[k] = temp1[k] * (1 + cos(temp2[k]));
+                temp3[k] = temp1[k] * (1 + temp2[k]);
             near_field_temp[y2][x2 - start] = complex_sum(temp3);
             //near_field[y2][x2] = complex_sum(temp3);
         }
@@ -360,7 +361,7 @@ void spr() {
         for (int i = 0; i < num_threads; ++i) {
             int start = i * step;
             int end = start + step;
-            threads.emplace_back(spr_cycle_threading_front, start, end, std::ref(near_field));
+            threads.emplace_back(spr_cycle_threading_front, start, end, ref(near_field));
         }
 
         for (auto& thread : threads) {
@@ -378,7 +379,7 @@ void spr() {
         for (int i = 0; i < num_threads; ++i) {
             int start = i * step;
             int end = start + step;
-            threads.emplace_back(spr_cycle_threading_back, start, end, std::ref(near_field));
+            threads.emplace_back(spr_cycle_threading_back, start, end, ref(near_field));
         }
 
         for (auto& thread : threads) {
@@ -459,7 +460,7 @@ void main() {
 
             stopwatch.start();
             spr();
-            stopwatch.stop("Finish main loop: ");
+            stopwatch.stop("Finish main loop : ");
         }
 
         static float max_val = *max_element(input_target_vec.begin(), input_target_vec.end());
