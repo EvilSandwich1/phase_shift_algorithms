@@ -11,12 +11,12 @@ const float c = 299792458.0f;  // Скорость света
 const float freq = 0.14e12;   // Частота
 const float lambda = (c * 1000.0) / freq;  // Длина волны
 const float k = 2 * M_PI / lambda;  // Волновой вектор
-const int pixels = 32;  // Количество пикселей
+const int pixels = 64;  // Количество пикселей
 const float pixelsize = 0.53;  // Размер пикселя
 const float focus = 30.0;  // Фокусное расстояние
-const int iteration_num = 100;  // Количество итераций
+const int iteration_num = 1;  // Количество итераций
 
-std::mutex resultMutex;
+mutex resultMutex;
 
 
 ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -27,8 +27,6 @@ vector<vector<float>> input_i;
 float power_in;
 
 //algo stuff
-vector<float> r = { 0, 0, focus };
-
 vector<vector<complex<float>>> Ed1(pixels, vector<complex<float>>(pixels, 0.0f));
 
 vector<complex<float>> temp1(pixels, 0.0f);
@@ -37,6 +35,21 @@ vector<complex<float>> temp3(pixels, 0.0f);
 float error_f = 0;
 const complex<float> i(0.0, 1.0);
 
+class Stopwatch {
+public:
+    void start() {
+        start_time = std::chrono::steady_clock::now(); // Запоминаем время начала
+    }
+
+    void stop(string text) {
+        auto end_time = std::chrono::steady_clock::now(); // Запоминаем время окончания
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        std::cout << text << " Elapsed time: " << duration.count() << " ms\n";
+    }
+
+private:
+    std::chrono::steady_clock::time_point start_time;
+};
 
 // Векторное произведение двух vector<float>
 vector<float> cross_product(const vector<float>& a, const vector<float>& b) {
@@ -49,7 +62,8 @@ vector<float> cross_product(const vector<float>& a, const vector<float>& b) {
 
 // Скалярное произведение двух vector<float>
 float dot_product(const vector<float>& a, const vector<float>& b) {
-    return inner_product(a.begin(), a.end(), b.begin(), 0.0f);
+    float res = inner_product(a.begin(), a.end(), b.begin(), 0.0f);
+    return res;
 }
 
 // Среднее в vector<float>
@@ -112,7 +126,7 @@ void unwrap(const vector<vector<T>>& input, vector<T>& output) {
 template<typename T>
 void wrap(const vector<T>& input, vector<vector<T>>& output, int size) {
     output.clear();
-    for (int j = 0; j < input.size(); j += size) {
+    for (int j = 0; j < input.size() - 1; j += size) {
         auto start = input.begin() + j;
         auto end = (j + size <= input.size()) ? start + size : input.end();
         output.emplace_back(start, end);
@@ -175,7 +189,9 @@ int return_sizeof_mat(const Mat& target) {
 
 // Единичное ФФТ преобразование
 void single_fft(int size_total, const Mat& resizedTarget, vector<complex<float>>& fft_result) {
-    PFFFT_Setup* pffft_setup = pffft_new_setup(pixels * pixels, PFFFT_REAL);
+    int size1 = sqrt(size_total);
+    fftwf_complex* out = fftwf_alloc_complex(size_total);
+    fftwf_complex* in = fftwf_alloc_complex(size_total + size1/2);
 
     // Создание массива C++ для хранения данных
     float* input_target = new float[size_total];
@@ -184,31 +200,52 @@ void single_fft(int size_total, const Mat& resizedTarget, vector<complex<float>>
 
     if (resizedTarget.isContinuous()) {
         // Если данные непрерывны, копируем их напрямую
-        std::memcpy(input_target, resizedTarget.datastart, sizeof(float) * size_total);
+        memcpy(input_target, resizedTarget.datastart, sizeof(float) * size_total);
         input_target_vec.assign((float*)resizedTarget.datastart, (float*)resizedTarget.dataend);
     }
     else {
         // Если данные не непрерывны, копируем построчно
         size_t idx = 0;
         for (int i = 0; i < resizedTarget.rows; ++i) {
-            std::memcpy(input_target + idx, resizedTarget.ptr<float>(i), resizedTarget.cols * resizedTarget.elemSize());
+            memcpy(input_target + idx, resizedTarget.ptr<float>(i), resizedTarget.cols * resizedTarget.elemSize());
             input_target_vec.insert(input_target_vec.end(), resizedTarget.ptr<float>(i), resizedTarget.ptr<float>(i) + resizedTarget.cols);
             idx += resizedTarget.cols;
         }
     }
 
-    float* output = new float[size_total * 2];
+    float* input_target_new = new float[size_total + (size1 * 2)];
 
-    pffft_transform_ordered(pffft_setup, input_target, output, NULL, PFFFT_BACKWARD);
+    fftwf_plan p = fftwf_plan_dft_r2c_2d(size1, size1, input_target_new, out, FFTW_BACKWARD);
+
+    for (int j = 0; j < size1; ++j) {
+        for (int k = 0; k < size1; ++k) {
+            input_target_new[j * (size1 + 2) + k] = input_target[j * size1 + k];
+        }
+        input_target_new[j * (size1 + 2) + 32] = 0;
+        input_target_new[j * (size1 + 2) + 33] = 0;
+    }
+
+    fftwf_execute(p);
+
+    int out_n1 = size1 / 2 + 1;
+
+    for (int i = 0; i < size1; ++i) {
+        for (int j = out_n1; j < size1; ++j) {
+            out[j * size1 + i][0] = out[i * out_n1 + (size1 - j)][0]; // Вещественная часть
+            out[j * size1 + i][1] = -out[i * out_n1 + (size1 - j)][1]; // Мнимая часть
+        }
+    }
 
     fft_result.resize(size_total + 1, 0);
-    for (int i = 0; i < size_total / 2 + 1; ++i) {
-        fft_result[i] = complex<float>(output[2 * i], output[2 * i + 1]);
+    for (int i = 0; i < size_total; ++i) {
+        fft_result[i] = complex<float>(out[i][0], out[i][1]);
     }
     
-    delete[] output;
+
+    delete[] input_target_new;
     delete[] input_target;
-    pffft_destroy_setup(pffft_setup);
+    fftwf_free(out);
+    fftwf_destroy_plan(p);
 }
 
 // Часть цикла SPR алгоритма в + направлении (+focus)
@@ -219,6 +256,7 @@ void spr_cycle_threading_front(int start, int end, const vector<vector<complex<f
     vector<complex<float>> temp1(pixels, 0.0f);
     vector<float> temp2(pixels, 0.0f);
     vector<complex<float>> temp3(pixels, 0.0f);
+    vector<float> r = { 0, 0, focus };
 
 
     Ed.resize(pixels);
@@ -247,7 +285,7 @@ void spr_cycle_threading_front(int start, int end, const vector<vector<complex<f
     unique_lock<mutex> lock(resultMutex);
     for (int x2 = start; x2 < end; ++x2) {
         for (int y2 = 0; y2 < pixels; ++y2)
-            far_field[y2][x2] = far_field[y2][x2 - start];
+            far_field[y2][x2] = far_field_temp[y2][x2 - start];
     }
     lock.unlock();
 
@@ -261,6 +299,7 @@ void spr_cycle_threading_back(int start, int end, vector<vector<complex<float>>>
     vector<complex<float>> temp1(pixels, 0.0f);
     vector<float> temp2(pixels, 0.0f);
     vector<complex<float>> temp3(pixels, 0.0f);
+    vector<float> r = { 0, 0, focus };
 
     Ed.resize(pixels);
     for (auto& row : Ed)
@@ -287,7 +326,7 @@ void spr_cycle_threading_back(int start, int end, vector<vector<complex<float>>>
     unique_lock<mutex> lock(resultMutex);
     for (int x2 = start; x2 < end; ++x2) {
         for (int y2 = 0; y2 < pixels; ++y2)
-            near_field[y2][x2] = near_field[y2][x2 - start];
+            near_field[y2][x2] = near_field_temp[y2][x2 - start];
     }
     lock.unlock();
 
@@ -297,7 +336,7 @@ void spr_cycle_threading_back(int start, int end, vector<vector<complex<float>>>
 void spr() {
     const int num_threads = 4; // thread::hardware_concurrency();
     vector<thread> threads;
-
+    int step = pixels / num_threads;
 
     set_input_intensity();
     Mat target;
@@ -319,9 +358,8 @@ void spr() {
     for (int iter = 0; iter < iteration_num; ++iter) {
 
         for (int i = 0; i < num_threads; ++i) {
-            int temp = pixels / num_threads;
-            int start = i * num_threads;
-            int end = (i == num_threads - 1) ? pixels : start + temp;
+            int start = i * step;
+            int end = start + step;
             threads.emplace_back(spr_cycle_threading_front, start, end, std::ref(near_field));
         }
 
@@ -338,10 +376,9 @@ void spr() {
         wrap(temp3, far_field2, pixels); 
 
         for (int i = 0; i < num_threads; ++i) {
-            int temp = pixels / num_threads;
-            int start = i * num_threads;
-            int end = (i == num_threads - 1) ? pixels : start + temp;
-            threads.emplace_back(spr_cycle_threading_front, start, end, std::ref(near_field));
+            int start = i * step;
+            int end = start + step;
+            threads.emplace_back(spr_cycle_threading_back, start, end, std::ref(near_field));
         }
 
         for (auto& thread : threads) {
@@ -418,7 +455,11 @@ void main() {
         ImGui::Begin("Main", NULL, flags);
 
         if (ImGui::Button("Start")) {
+            Stopwatch stopwatch;
+
+            stopwatch.start();
             spr();
+            stopwatch.stop("Finish main loop: ");
         }
 
         static float max_val = *max_element(input_target_vec.begin(), input_target_vec.end());

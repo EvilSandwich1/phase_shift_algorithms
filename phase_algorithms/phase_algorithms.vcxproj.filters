@@ -110,5 +110,8 @@
     <ClInclude Include="include\imgui\imgui_impl_dx11.h">
       <Filter>Header Files\imgui</Filter>
     </ClInclude>
+    <ClInclude Include="include\fftw3.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

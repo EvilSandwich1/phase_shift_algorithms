@@ -14,6 +14,7 @@
 #include <corecrt_math_defines.h>
 //#include <Eigen/Dense>
 #include <opencv2/opencv.hpp>
+#include <fftw3.h>
 
 #include ".\include\imgui\imgui.h"
 #include ".\include\imgui\imconfig.h"
