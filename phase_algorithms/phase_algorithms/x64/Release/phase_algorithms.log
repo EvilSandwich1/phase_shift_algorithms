@@ -1,0 +1,17 @@
+﻿  imgui.cpp
+  imgui_demo.cpp
+  imgui_draw.cpp
+  imgui_impl_dx11.cpp
+  imgui_impl_win32.cpp
+  imgui_stdlib.cpp
+  imgui_tables.cpp
+  imgui_widgets.cpp
+  implot.cpp
+  implot_demo.cpp
+  implot_items.cpp
+  main.cpp
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\include\render.h(13,10): error C1083: Cannot open include file: 'pffft/pffft.h': No such file or directory
+  (compiling source file 'main.cpp')
+  
+  render.cpp
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\render.cpp(1,10): error C1083: Cannot open include file: 'render.h': No such file or directory

@@ -5,9 +5,12 @@
 #include <tchar.h>
 #include <shobjidl.h> 
 #include <string>
+#include <fstream>
 #include <cmath>
 #include <vector>
 #include <complex>
+#include <algorithm>
+#include <random>
 #include <numeric>
 #include <thread>
 #include <pffft/pffft.h>

@@ -8,13 +8,14 @@ using namespace cv;
 using namespace std;
 
 const float c = 299792458.0f;  // Скорость света
-const float freq = 0.14e12;   // Частота
-const float lambda = (c * 1000.0) / freq;  // Длина волны
+const float freq = 0.14e12f;   // Частота
+const float lambda = (c * 1000.0f) / freq;  // Длина волны
 const float k = 2 * M_PI / lambda;  // Волновой вектор
-const int pixels = 128;  // Количество пикселей
-const float pixelsize = 0.214;  // Размер пикселя
-const float focus = 30.0;  // Фокусное расстояние
-const int iteration_num = 1;  // Количество итераций
+const int pixels = 96;  // Количество пикселей
+const float pixelsize = 0.214f;  // Размер пикселя
+const float focus = 30.0f;  // Фокусное расстояние
+const int iteration_num = 3;  // Количество итераций
+const float refractive_index = 1.54f;
 
 mutex resultMutex;
 
@@ -22,12 +23,13 @@ mutex resultMutex;
 ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 vector<vector<complex<float>>> far_field(pixels, vector<complex<float>>(pixels, 0.0f));
 vector<vector<complex<float>>> far_field2(pixels, vector<complex<float>>(pixels, 0.0f));
-vector<float> input_target_vec(pixels * pixels, 0);
+vector<vector<complex<float>>> near_field(pixels, vector<complex<float>>(pixels, 0.0f));
+
+vector<float> input_target_vec(pixels * pixels, 0.0f);
 vector<vector<float>> input_i;
 float power_in;
 
 //algo stuff
-vector<vector<complex<float>>> Ed1(pixels, vector<complex<float>>(pixels, 0.0f));
 
 vector<complex<float>> temp1(pixels, 0.0f);
 vector<float> temp2(pixels, 0.0f);
@@ -51,6 +53,38 @@ private:
     std::chrono::steady_clock::time_point start_time;
 };
 
+void heightmap(const vector<float>& input) {
+    vector<float> z(pixels * pixels, 0.0f);
+    int totalsize = pixels * pixels;
+
+    for (int j = 0; j < totalsize; ++j)
+        z[j] = input[j] * lambda / ((refractive_index - 1) * 2 * M_PI);
+
+    write_to_file(z, "heightmap.txt");
+}
+
+// Запись в файл
+template<typename T>
+void write_to_file(const vector<complex<T>>& input, const string& filename) {
+    ofstream output;
+    output.open(filename);
+    for (const auto& value : input) {
+        output << value.real() << "," << value.imag() << "\n";
+    }
+    output.close();
+}
+
+// Запись в файл
+template<typename T>
+void write_to_file(const vector<T>& input, const string& filename) {
+    ofstream output;
+    output.open(filename);
+    for (const auto& value : input) {
+        output << value << "\n";
+    }
+    output.close();
+}
+
 // Векторное произведение двух vector<float>
 vector<float> cross_product(const vector<float>& a, const vector<float>& b) {
     return {
@@ -71,12 +105,12 @@ float arr_mean(const vector<float>& arr) {
     if (arr.empty()) {
         return 0.0; // Чтобы избежать деления на ноль
     }
-    float sum = std::accumulate(arr.begin(), arr.end(), 0.0); // Суммируем элементы
+    float sum = accumulate(arr.begin(), arr.end(), 0.0); // Суммируем элементы
     return sum / arr.size(); // Делим сумму на количество элементов
 }
 
 // Евклидова норма (длина вектора) vector<float>
-float l2_norm(const vector<float>& vec) {
+float l2_norm(const array<float, 3>& vec) {
     float sum = 0.0;
     for (float value : vec) {
         sum += value * value;
@@ -122,6 +156,15 @@ void unwrap(const vector<vector<T>>& input, vector<T>& output) {
     }
 }
 
+// Развертывание матрицы input в длинный vector output
+template<typename T, size_t N>
+void unwrap(const array<array<T, N>, N>& input, vector<T>& output) {
+    output.clear();
+    for (const auto& row : input) {
+        output.insert(output.end(), row.begin(), row.end());
+    }
+}
+
 // Свертывание длинного vector input в матрицу output по кол-ву эл-ов size
 template<typename T>
 void wrap(const vector<T>& input, vector<vector<T>>& output, int size) {
@@ -161,7 +204,7 @@ void set_input_intensity() {
 // Чтение изображения из указанного файла. TODO: Сделать окошко с выбором файла
 void image_read(Mat& target) {
 
-    target = imread("./images/cross2_300x300_small.png", IMREAD_GRAYSCALE);
+    target = imread("./images/krest_dlya_kamery.png", IMREAD_GRAYSCALE);
 
     target.convertTo(target, CV_32F);
 
@@ -175,6 +218,19 @@ void image_read(Mat& target) {
     cv::resize(target, resizedTarget, newSize, 0, 0, cv::INTER_AREA); // INTER_AREA лучше всего подходит для уменьшения
 
     target = resizedTarget;
+
+    if (resizedTarget.isContinuous()) {
+        // Если данные непрерывны, копируем их напрямую
+        input_target_vec.assign((float*)resizedTarget.datastart, (float*)resizedTarget.dataend);
+    }
+    else {
+        // Если данные не непрерывны, копируем построчно
+        size_t idx = 0;
+        for (int i = 0; i < resizedTarget.rows; ++i) {
+            input_target_vec.insert(input_target_vec.end(), resizedTarget.ptr<float>(i), resizedTarget.ptr<float>(i) + resizedTarget.cols);
+            idx += resizedTarget.cols;
+        }
+    }
 }
 
 // Вернуть размер Mat
@@ -188,7 +244,7 @@ int return_sizeof_mat(const Mat& target) {
 }
 
 // Единичное ФФТ преобразование
-void single_fft(int size_total, const Mat& resizedTarget, vector<complex<float>>& fft_result) {
+void single_fft(int size_total, const Mat& resizedTarget, vector<complex<float>>& fft_result, vector<float>& input_target_vec) {
     int size1 = sqrt(size_total);
     fftwf_complex* out = fftwf_alloc_complex(size_total);
     fftwf_complex* in = fftwf_alloc_complex(size_total + size1/2);
@@ -256,7 +312,7 @@ void spr_cycle_threading_front(int start, int end, const vector<vector<complex<f
     vector<complex<float>> temp1(pixels, 0.0f);
     vector<float> temp2(pixels, 0.0f);
     vector<complex<float>> temp3(pixels*pixels, 0.0f);
-    vector<float> r { 0, 0, focus };
+    array<float, 3> r { 0, 0, focus };
 
     Ed.resize(pixels);
     for (auto& row : Ed)
@@ -268,17 +324,16 @@ void spr_cycle_threading_front(int start, int end, const vector<vector<complex<f
                 for (int y1 = 0; y1 < pixels; ++y1) {
                     r = { (x2 * pixelsize) - (x1 * pixelsize), (y2 * pixelsize) - (y1 * pixelsize), focus };
                     float norm = l2_norm(r);
-                    Ed[x1][y1] = (i * input_i[x1][y1] / (norm * 2 * lambda) * exp(i * k * norm + i * arg(near_field[x1][y1])));
+                    Ed[x1][y1] = abs(input_i[x1][y1]) / norm  * exp(-i * k * norm + i * arg(near_field[x1][y1]));
                     cos_omega[x1][y1] = focus/norm;
                 }
             }
             unwrap(Ed, temp1);
             unwrap(cos_omega, temp2);
-            //temp3.resize(temp1.size(), 0.0f);
-            for (int k = 0; k < temp1.size(); ++k)
+            int totalsize = temp1.size();
+            for (int k = 0; k < totalsize; ++k)
                 temp3[k] = temp1[k] * (1 + temp2[k]);
             far_field_temp[y2][x2-start] = complex_sum(temp3);
-            //far_field[y2][x2] = complex_sum(temp3);
         }
     }
 
@@ -292,14 +347,14 @@ void spr_cycle_threading_front(int start, int end, const vector<vector<complex<f
 }
 
 // Часть цикла SPR алгоритма в - направлении (-focus)
-void spr_cycle_threading_back(int start, int end, vector<vector<complex<float>>>& near_field) {
+void spr_cycle_threading_back(int start, int end) {
     vector<vector<complex<float>>> Ed(pixels, vector<complex<float>>(pixels, 0.0f));
     vector<vector<float>> cos_omega(pixels, vector<float>(pixels, 0.0f));
     vector<vector<complex<float>>> near_field_temp(pixels, vector<complex<float>>(pixels, 0.0f));
     vector<complex<float>> temp1(pixels, 0.0f);
     vector<float> temp2(pixels, 0.0f);
     vector<complex<float>> temp3(pixels * pixels, 0.0f);
-    vector<float> r { 0, 0, focus };
+    array<float, 3> r { 0, 0, focus };
 
     Ed.resize(pixels);
     for (auto& row : Ed)
@@ -311,17 +366,15 @@ void spr_cycle_threading_back(int start, int end, vector<vector<complex<float>>>
                 for (int y1 = 0; y1 < pixels; ++y1) {
                     r = { (x2 * pixelsize) - (x1 * pixelsize), (y2 * pixelsize) - (y1 * pixelsize), focus };
                     float norm = l2_norm(r);
-                    Ed[x1][y1] = (i * abs(far_field2[x1][y1]) / (norm * 2 * lambda) * exp(-i * k * norm + i * arg(far_field2[x1][y1])));
+                    Ed[x1][y1] = far_field2[x1][y1] / norm  * exp(i * k * norm);
                     cos_omega[x1][y1] = focus / norm;
                 }
             }
-            unwrap(Ed1, temp1);
+            unwrap(Ed, temp1);
             unwrap(cos_omega, temp2);
-            //temp3.resize(temp1.size(), 0.0f);
             for (int k = 0; k < temp1.size(); ++k)
                 temp3[k] = temp1[k] * (1 + temp2[k]);
             near_field_temp[y2][x2 - start] = complex_sum(temp3);
-            //near_field[y2][x2] = complex_sum(temp3);
         }
     }
     unique_lock<mutex> lock(resultMutex);
@@ -344,12 +397,21 @@ void spr() {
     image_read(target);
     int size_total = return_sizeof_mat(target);
 
-    vector<complex<float>> fft_result;
-    single_fft(size_total, target, fft_result);
+    //vector<complex<float>> fft_result;
+    //single_fft(size_total, target, fft_result, input_target_vec);
 
-    vector<vector<complex<float>>> near_field(pixels, vector<complex<float>>(pixels, 0.0f));
+    // Перемешиваем вектор
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_real_distribution<> dist(0, M_PI); // Распределение для вещественной и мнимой частей
 
-    wrap(fft_result, near_field, pixels);
+    // Заполняем вектор случайными комплексными числами
+    for (auto& elem : temp1) {
+        elem = complex<double>(dist(gen), dist(gen)); // Случайные вещественная и мнимая части
+    }
+    wrap(temp1, near_field, pixels);
+
+    //wrap(fft_result, near_field, pixels);
     for (auto& rows : near_field) {
         for (int j = 0; j < rows.size(); ++j) {
             rows[j] = exp(i * arg(rows[j]));
@@ -373,13 +435,13 @@ void spr() {
         unwrap(far_field, temp1);
         temp3.resize(size_total, 0.0f);
         for (int k = 0; k < size_total; ++k)
-            temp3[k] = abs(input_target_vec[k] * exp(i * arg(temp1[k])));
+            temp3[k] = abs(input_target_vec[k]) * exp(i * arg(temp1[k]));
         wrap(temp3, far_field2, pixels); 
 
         for (int i = 0; i < num_threads; ++i) {
             int start = i * step;
             int end = start + step;
-            threads.emplace_back(spr_cycle_threading_back, start, end, ref(near_field));
+            threads.emplace_back(spr_cycle_threading_back, start, end);
         }
 
         for (auto& thread : threads) {
@@ -389,8 +451,8 @@ void spr() {
         threads.clear();
 
         unwrap(near_field, temp1);
-        temp3.resize(temp1.size(), 0.0f);
-        for (int k = 0; k < temp1.size(); ++k)
+        temp3.resize(size_total, 0.0f);
+        for (int k = 0; k < size_total; ++k)
             temp3[k] = exp(i * arg(temp1[k]));
         wrap(temp3, near_field, pixels);
         unwrap(far_field2, temp1);
@@ -399,6 +461,15 @@ void spr() {
             error_f += (pow(abs(temp1[k]), 2.0f) / pow(abs(input_target_vec[k]), 2.0f));
         }
     }
+    unwrap(near_field, temp1);
+    write_to_file(temp1, "result_phase.txt");
+    unwrap(far_field, temp1);
+    write_to_file(temp1, "result_image.txt");
+    for (int j = 0; j < size_total; ++j) {
+        temp2[j] = arg(temp1[j]);
+    }
+    heightmap(temp2);
+
 }
 
 void main() {
@@ -460,7 +531,9 @@ void main() {
 
             stopwatch.start();
             spr();
-            stopwatch.stop("Finish main loop : ");
+            stopwatch.stop("Finish main loop: ");
+
+
         }
 
         static float max_val = *max_element(input_target_vec.begin(), input_target_vec.end());
@@ -474,23 +547,41 @@ void main() {
             ImPlot::EndPlot();
         }
         ImGui::SameLine();
-        ImPlot::ColormapScale("##target", min_val, max_val, ImVec2(60, 225));
+        //ImPlot::ColormapScale("##target", min_val, max_val, ImVec2(60, 225));
 
         unwrap(far_field, temp1);
         decomplex(temp1, temp2);
 
         static float max_val_res = *max_element(temp2.begin(), temp2.end());
         static float min_val_res = *min_element(temp2.begin(), temp2.end());
+        ImGui::SameLine();
 
         static ImPlotAxisFlags res_axes_flags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
         ImPlot::PushColormap(ImPlotColormap_Greys);
         if (ImPlot::BeginPlot("Result Image", ImVec2(350, 350), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
-            ImPlot::SetupAxes(nullptr, nullptr, axes_flags, axes_flags);
+            ImPlot::SetupAxes(nullptr, nullptr, res_axes_flags, res_axes_flags);
             ImPlot::PlotHeatmap("result", &temp2[0], pixels, pixels, min_val_res, max_val_res, nullptr, ImPlotPoint(0, 0), ImPlotPoint(1, 1), ImPlotHeatmapFlags_ColMajor);
             ImPlot::EndPlot();
         }
         ImGui::SameLine();
-        ImPlot::ColormapScale("##target", min_val_res, max_val_res, ImVec2(60, 225));
+        //ImPlot::ColormapScale("##result", min_val_res, max_val_res, ImVec2(60, 225));
+
+        unwrap(near_field, temp1);
+        decomplex(temp1, temp2);
+
+        static float max_val_phase = *max_element(temp2.begin(), temp2.end());
+        static float min_val_phase = *min_element(temp2.begin(), temp2.end());
+
+        ImGui::SameLine();
+        static ImPlotAxisFlags phase_axes_flags = ImPlotAxisFlags_Lock | ImPlotAxisFlags_NoGridLines | ImPlotAxisFlags_NoTickMarks;
+        ImPlot::PushColormap(ImPlotColormap_Greys);
+        if (ImPlot::BeginPlot("Phase", ImVec2(350, 350), ImPlotFlags_NoLegend | ImPlotFlags_NoMouseText)) {
+            ImPlot::SetupAxes(nullptr, nullptr, phase_axes_flags, phase_axes_flags);
+            ImPlot::PlotHeatmap("result phase", &temp2[0], pixels, pixels, min_val_phase, max_val_phase, nullptr, ImPlotPoint(0, 0), ImPlotPoint(1, 1), ImPlotHeatmapFlags_ColMajor);
+            ImPlot::EndPlot();
+        }
+        ImGui::SameLine();
+        ImPlot::ColormapScale("##result", min_val_phase, max_val_phase, ImVec2(60, 225));
 
         ImGui::End();
         // Rendering
