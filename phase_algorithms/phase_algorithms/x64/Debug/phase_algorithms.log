@@ -1,11 +1,18 @@
 ﻿  main.cpp
 D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(13,26): warning C4305: 'initializing': truncation from 'double' to 'float'
-D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(86,15): warning C4244: 'initializing': conversion from '_Ty' to 'float', possible loss of data
-D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(86,15): warning C4244:         with
-D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(86,15): warning C4244:         [
-D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(86,15): warning C4244:             _Ty=double
-D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(86,15): warning C4244:         ]
-D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(226,15): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
-D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(311,27): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(449,6): warning C4326: return type of 'main' should be 'int' instead of 'void'
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(84,34): warning C4244: '=': conversion from 'double' to '_Ty', possible loss of data
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(84,34): warning C4244:         with
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(84,34): warning C4244:         [
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(84,34): warning C4244:             _Ty=float
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(84,34): warning C4244:         ]
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(109,15): warning C4244: 'initializing': conversion from '_Ty' to 'float', possible loss of data
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(109,15): warning C4244:         with
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(109,15): warning C4244:         [
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(109,15): warning C4244:             _Ty=double
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(109,15): warning C4244:         ]
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(249,15): warning C4244: 'initializing': conversion from 'double' to 'int', possible loss of data
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(334,27): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\main.cpp(476,6): warning C4326: return type of 'main' should be 'int' instead of 'void'
+  render.cpp
+  Generating Code...
   phase_algorithms.vcxproj -> D:\рабочий стол\Курганский ИД\repository\algorithms\phase_algorithms\x64\Debug\phase_algorithms.exe

@@ -35,6 +35,7 @@ extern bool g_SwapChainOccluded;
 extern UINT g_ResizeWidth, g_ResizeHeight;
 extern ID3D11RenderTargetView* g_mainRenderTargetView;
 
+// render.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 void init_window_class();
 LRESULT CALLBACK wnd_proc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -43,3 +44,11 @@ void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
 void CleanUp();
+
+// Запись в файл
+template<typename T>
+void write_to_file(const std::vector<T>& input, const std::string& filename);
+
+// Запись в файл
+template<typename T>
+void write_to_file(const std::vector<std::complex<T>>& input, const std::string& filename);

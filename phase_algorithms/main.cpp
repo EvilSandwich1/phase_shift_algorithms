@@ -13,7 +13,7 @@ const float lambda = (c * 1000.0f) / freq;  // Длина волны
 const float k = 2 * M_PI / lambda;  // Волновой вектор
 const int pixels = 96;  // Количество пикселей
 const float pixelsize = 0.214f;  // Размер пикселя
-const float focus = 30.0f;  // Фокусное расстояние
+const float focus = 50.0f;  // Фокусное расстояние
 const int iteration_num = 3;  // Количество итераций
 const float refractive_index = 1.54f;
 
@@ -53,16 +53,6 @@ private:
     std::chrono::steady_clock::time_point start_time;
 };
 
-void heightmap(const vector<float>& input) {
-    vector<float> z(pixels * pixels, 0.0f);
-    int totalsize = pixels * pixels;
-
-    for (int j = 0; j < totalsize; ++j)
-        z[j] = input[j] * lambda / ((refractive_index - 1) * 2 * M_PI);
-
-    write_to_file(z, "heightmap.txt");
-}
-
 // Запись в файл
 template<typename T>
 void write_to_file(const vector<complex<T>>& input, const string& filename) {
@@ -83,6 +73,17 @@ void write_to_file(const vector<T>& input, const string& filename) {
         output << value << "\n";
     }
     output.close();
+}
+
+// Карта высот
+void heightmap(const vector<float>& input) {
+    vector<float> z(pixels * pixels, 0.0f);
+    int totalsize = pixels * pixels;
+
+    for (int j = 0; j < totalsize; ++j)
+        z[j] = input[j] * lambda / ((refractive_index - 1) * 2 * M_PI);
+
+    write_to_file(z, "heightmap.txt");
 }
 
 // Векторное произведение двух vector<float>
